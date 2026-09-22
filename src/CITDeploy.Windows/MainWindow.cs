@@ -141,6 +141,9 @@ public sealed class MainWindow : Window
             software.Children.Add(new TextBlock { Text = "Create a clinic and profile to begin.", TextWrapping = TextWrapping.Wrap });
             return;
         }
+        computer.IsEnabled = !busy && Rules.HasDomain(clinic);
+        if (!Rules.HasDomain(clinic))
+            computer.Text = Environment.MachineName;
         if (profile != null)
             foreach (var p in Data.Packages.Where(p => Rules.Available(p, clinic.Id)).OrderBy(p => p.Name))
             {
@@ -151,7 +154,7 @@ public sealed class MainWindow : Window
                 AddLinks(row, p, clinic.Id);
                 software.Children.Add(row);
             }
-        inherited.Children.Add(new TextBlock { Text = $"Syncro: {(!Rules.HasSyncro(clinic) ? "Not configured — will be skipped" : Path.GetFileName(clinic.SyncroRelativePath))}\nDomain: {clinic.DomainFqdn}\nOU: {(string.IsNullOrEmpty(clinic.OuPath) ? "Default computer container" : clinic.OuPath)}", TextWrapping = TextWrapping.Wrap });
+        inherited.Children.Add(new TextBlock { Text = $"Syncro: {(!Rules.HasSyncro(clinic) ? "Not configured — will be skipped" : Path.GetFileName(clinic.SyncroRelativePath))}\nDomain: {(Rules.HasDomain(clinic) ? clinic.DomainFqdn : "Not configured — join will be skipped")}\nOU: {(string.IsNullOrEmpty(clinic.OuPath) ? "Default computer container" : clinic.OuPath)}", TextWrapping = TextWrapping.Wrap });
     }
     string Site(Package p, int clinic) => Data.SiteLinks.FirstOrDefault(l => l.ClinicId == clinic && l.SoftwareId == p.Id)?.Url ?? "";
     void AddLinks(Panel panel, Package p, int clinic)
@@ -186,7 +189,7 @@ public sealed class MainWindow : Window
         var c = source == null ? new Clinic { Id = Next(Data.Clinics.Select(x => x.Id)) } : Copy(source);
         var e = new Editor(source == null ? "Add clinic" : "Edit clinic", c) { Owner = this };
         e.Field("Friendly name", nameof(c.Name));
-        e.Field("Active Directory domain FQDN", nameof(c.DomainFqdn));
+        e.Field("Active Directory domain FQDN (optional)", nameof(c.DomainFqdn));
         e.Field("Target OU distinguished name (optional)", nameof(c.OuPath));
         e.Field("Computer naming prefix", nameof(c.ComputerPrefix));
         e.Field("Active", nameof(c.IsActive));
@@ -195,7 +198,7 @@ public sealed class MainWindow : Window
         e.Action("Import / replace Syncro installer", () => { var pick = PickFile(); if (pick != null) media.Text = session.Storage.Import(pick, "Syncro", pick); });
         e.Action("Remove Syncro mapping", () => { media.Clear(); c.SyncroArguments = ""; e.RefreshFields(); });
         e.Field("Syncro silent arguments", nameof(c.SyncroArguments));
-        e.Note("Every profile inherits this clinic’s domain and naming prefix. Syncro is installed only when an installer is configured.");
+        e.Note("Every profile inherits this clinic’s domain and naming prefix. Syncro is installed only when an installer is configured. Leave the domain blank to skip domain checks, credentials, joining and renaming.");
         var links = new Dictionary<int, TextBox>();
         foreach (var p in Data.Packages.Where(p => Rules.Available(p, c.Id)))
         {
@@ -203,7 +206,7 @@ public sealed class MainWindow : Window
             links[p.Id] = url;
             e.Action("Test " + p.Name + " site link", () => TechnicianDialogs.Open(url.Text));
         }
-        e.Save(() => { c.SyncroRelativePath = media.Text.Trim(); if (source != null) Data.Clinics.RemoveAll(x => x.Id == source.Id); Data.Clinics.Add(c); Data.SiteLinks.RemoveAll(l => l.ClinicId == c.Id); foreach (var pair in links.Where(x => Rules.HasLink(x.Value.Text))) Data.SiteLinks.Add(new(c.Id, pair.Key, pair.Value.Text)); c.UpdatedUtc = DateTime.UtcNow; session.Save("Saved clinic " + c.Name); });
+        e.Save(() => { c.DomainFqdn = c.DomainFqdn.Trim(); c.SyncroRelativePath = media.Text.Trim(); if (source != null) Data.Clinics.RemoveAll(x => x.Id == source.Id); Data.Clinics.Add(c); Data.SiteLinks.RemoveAll(l => l.ClinicId == c.Id); foreach (var pair in links.Where(x => Rules.HasLink(x.Value.Text))) Data.SiteLinks.Add(new(c.Id, pair.Key, pair.Value.Text)); c.UpdatedUtc = DateTime.UtcNow; session.Save("Saved clinic " + c.Name); });
         e.ShowDialog();
         Refresh();
     }
@@ -228,7 +231,7 @@ public sealed class MainWindow : Window
             options.Clear();
             var c = (Clinic)clinic.SelectedItem;
             p.ClinicId = c.Id;
-            rows.Children.Add(new TextBlock { Text = $"Inherited Syncro: {(Rules.HasSyncro(c) ? c.SyncroRelativePath : "Not configured — will be skipped")}\nDomain: {c.DomainFqdn}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) });
+            rows.Children.Add(new TextBlock { Text = $"Inherited Syncro: {(Rules.HasSyncro(c) ? c.SyncroRelativePath : "Not configured — will be skipped")}\nDomain: {(Rules.HasDomain(c) ? c.DomainFqdn : "Not configured — join will be skipped")}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) });
             foreach (var package in Data.Packages.Where(x => Rules.Available(x, c.Id)))
             {
                 var cb = new CheckBox { Content = package.Name, IsChecked = p.Software.ContainsKey(package.Id) };
@@ -438,8 +441,9 @@ public sealed class MainWindow : Window
             return;
         var clinic = clinics.SelectedItem as Clinic ?? throw new InvalidOperationException("Select a clinic.");
         var profile = profiles.SelectedItem as Profile ?? throw new InvalidOperationException("Select a profile.");
-        var name = computer.Text.Trim();
-        Rules.ComputerName(name);
+        var name = Rules.HasDomain(clinic) ? computer.Text.Trim() : Environment.MachineName;
+        if (Rules.HasDomain(clinic))
+            Rules.ComputerName(name);
         using (var identity = WindowsIdentity.GetCurrent())
             if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
                 throw new InvalidOperationException("Restart CIT Deploy as administrator.");
@@ -449,7 +453,7 @@ public sealed class MainWindow : Window
             throw new InvalidOperationException("Missing required media:\n" + string.Join("\n", missing));
         foreach (var p in plan)
             ValidatePackagePaths(p);
-        if (!Confirm($"Deploy {plan.Count} application(s), {(Rules.HasSyncro(clinic) ? "install the configured Syncro agent" : "skip Syncro (not configured)")}, and join {clinic.DomainFqdn} as {name}?"))
+        if (!Confirm($"Deploy {plan.Count} application(s), {(Rules.HasSyncro(clinic) ? "install the configured Syncro agent" : "skip Syncro (not configured)")}, and {(Rules.HasDomain(clinic) ? $"join {clinic.DomainFqdn} as {name}" : "skip domain join and keep the current computer name")}?"))
             return;
         var results = new Dictionary<int, StepResult>();
         var directory = Path.Combine(session.Storage.Root, "Logs", name);
@@ -466,11 +470,14 @@ public sealed class MainWindow : Window
             if (tab != tabs.Items[0])
                 tab.IsEnabled = false;
         steps.Clear();
-        summary.Text = "Checking domain connectivity…";
+        summary.Text = Rules.HasDomain(clinic) ? "Checking domain connectivity…" : "Preparing application deployment…";
         try
         {
-            await domain.Preflight(clinic.DomainFqdn);
-            Log("Domain preflight passed");
+            if (Rules.HasDomain(clinic))
+            {
+                await domain.Preflight(clinic.DomainFqdn);
+                Log("Domain preflight passed");
+            }
             var rows = plan.ToDictionary(p => p.Id, p => new StepViewModel(p.Name));
             foreach (var row in rows.Values)
                 steps.Add(row);
@@ -507,36 +514,45 @@ public sealed class MainWindow : Window
             reboot |= syncResult.RebootRequired;
             if (syncResult.State == StepState.Failed)
                 throw new InvalidOperationException("Configured Syncro installation failed; domain join was not attempted.");
-            domainStep.State = StepState.Running;
-            summary.Text = "Preparing domain join…";
-            await domain.Preflight(clinic.DomainFqdn);
-            var credentials = new Editor("Domain join credentials", new object()) { Owner = this, Height = 430 };
-            credentials.Note($"Join {clinic.DomainFqdn} and rename to {name}. Credentials exist only in memory for this operation.");
-            var user = credentials.Text("Authorized account (DOMAIN\\user or user@domain)");
-            var password = new PasswordBox { Margin = new Thickness(0, 6, 0, 16), Padding = new Thickness(8) };
-            credentials.Add(new TextBlock { Text = "Password" });
-            credentials.Add(password);
-            credentials.Action("Join domain", () => { if (string.IsNullOrWhiteSpace(user.Text) || password.SecurePassword.Length == 0) throw new InvalidOperationException("Enter account and password."); credentials.DialogResult = true; });
-            if (credentials.ShowDialog() != true)
+            if (Rules.HasDomain(clinic))
             {
-                password.Clear();
-                user.Clear();
-                throw new OperationCanceledException("Domain join cancelled.");
+                domainStep.State = StepState.Running;
+                summary.Text = "Preparing domain join…";
+                await domain.Preflight(clinic.DomainFqdn);
+                var credentials = new Editor("Domain join credentials", new object()) { Owner = this, Height = 430 };
+                credentials.Note($"Join {clinic.DomainFqdn} and rename to {name}. Credentials exist only in memory for this operation.");
+                var user = credentials.Text("Authorized account (DOMAIN\\user or user@domain)");
+                var password = new PasswordBox { Margin = new Thickness(0, 6, 0, 16), Padding = new Thickness(8) };
+                credentials.Add(new TextBlock { Text = "Password" });
+                credentials.Add(password);
+                credentials.Action("Join domain", () => { if (string.IsNullOrWhiteSpace(user.Text) || password.SecurePassword.Length == 0) throw new InvalidOperationException("Enter account and password."); credentials.DialogResult = true; });
+                if (credentials.ShowDialog() != true)
+                {
+                    password.Clear();
+                    user.Clear();
+                    throw new OperationCanceledException("Domain join cancelled.");
+                }
+                try
+                {
+                    using var secure = password.SecurePassword;
+                    password.Clear();
+                    await domain.Join(clinic, name, user.Text, secure);
+                }
+                finally { user.Clear(); password.Clear(); }
+                joined = true;
+                reboot = true;
+                domainStep.State = StepState.Success;
+                domainStep.Detail = "Joined and renamed; reboot required";
+                Log("Domain join and rename succeeded");
             }
-            try
+            else
             {
-                using var secure = password.SecurePassword;
-                password.Clear();
-                await domain.Join(clinic, name, user.Text, secure);
+                domainStep.State = StepState.Skipped;
+                domainStep.Detail = "No domain configured; join and rename skipped.";
+                Log(domainStep.Detail);
             }
-            finally { user.Clear(); password.Clear(); }
-            joined = true;
-            reboot = true;
-            domainStep.State = StepState.Success;
-            domainStep.Detail = "Joined and renamed; reboot required";
-            Log("Domain join and rename succeeded");
             var failures = results.Values.Count(r => r.State == StepState.Failed);
-            summary.Text = $"{(failures == 0 ? "Deployment completed" : "Completed with explicitly overridden failures")}. {results.Values.Count(r => r.State is StepState.Success or StepState.RebootRequired)} installed, {results.Values.Count(r => r.State == StepState.Skipped)} skipped, {failures} failed. Domain joined. Reboot required.";
+            summary.Text = $"{(failures == 0 ? "Deployment completed" : "Completed with explicitly overridden failures")}. {results.Values.Count(r => r.State is StepState.Success or StepState.RebootRequired)} installed, {results.Values.Count(r => r.State == StepState.Skipped)} skipped, {failures} failed. {(joined ? "Domain joined." : "Domain join skipped.")} {(reboot ? "Reboot required." : "No reboot required.")}";
         }
         catch (Exception ex)
         {
@@ -558,7 +574,8 @@ public sealed class MainWindow : Window
         {
             busy = false;
             start.IsEnabled = true;
-            clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = true;
+            clinics.IsEnabled = profiles.IsEnabled = software.IsEnabled = true;
+            computer.IsEnabled = Rules.HasDomain(clinic);
             foreach (TabItem tab in tabs.Items)
                 tab.IsEnabled = true;
             try

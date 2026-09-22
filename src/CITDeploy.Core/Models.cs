@@ -63,6 +63,7 @@ public record ExecutionResult(int? ExitCode, bool TimedOut, TimeSpan Duration, b
 public record StepResult(Package Package, StepState State, int? ExitCode, string Detail, bool Verified = false, bool RebootRequired = false);
 public static class Rules
 {
+    public static bool HasDomain(Clinic clinic) => !string.IsNullOrWhiteSpace(clinic.DomainFqdn);
     public static bool HasSyncro(Clinic clinic) => !string.IsNullOrWhiteSpace(clinic.SyncroRelativePath);
     public static bool Available(Package p, int clinic) => p.IsActive && (p.ClinicId is null || p.ClinicId == clinic);
     public static bool HasLink(string? url) => !string.IsNullOrWhiteSpace(url);
@@ -111,8 +112,8 @@ public static class Rules
         if (c.Clinics.GroupBy(x => x.Name.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
             throw new InvalidOperationException("Clinic names must be unique.");
         foreach (var x in c.Clinics)
-            if (string.IsNullOrWhiteSpace(x.Name) || Uri.CheckHostName(x.DomainFqdn) != UriHostNameType.Dns || !x.DomainFqdn.Contains('.'))
-                throw new InvalidOperationException("Clinic name and domain FQDN are required.");
+            if (string.IsNullOrWhiteSpace(x.Name) || (HasDomain(x) && (Uri.CheckHostName(x.DomainFqdn) != UriHostNameType.Dns || !x.DomainFqdn.Contains('.'))))
+                throw new InvalidOperationException("Clinic name is required. If a domain is provided, it must be a valid FQDN.");
         if (c.Profiles.GroupBy(x => (x.ClinicId, x.Name.Trim().ToUpperInvariant())).Any(g => g.Count() > 1))
             throw new InvalidOperationException("Profile names must be unique within a clinic.");
         foreach (var p in c.Packages)

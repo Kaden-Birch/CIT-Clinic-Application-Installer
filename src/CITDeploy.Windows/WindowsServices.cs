@@ -225,10 +225,14 @@ public sealed class DomainService
 {
     public async Task Preflight(string domain)
     {
+        if (string.IsNullOrWhiteSpace(domain))
+            return;
         await Task.Run(() => { var status = DsGetDcName(null, domain, IntPtr.Zero, null, 0x40000010, out var info); if (info != IntPtr.Zero) NetApiBufferFree(info); if (status != 0) throw new System.ComponentModel.Win32Exception((int)status, "Domain controller discovery failed. Check clinic DNS, network/VPN, and domain name."); });
     }
     public async Task Join(Clinic clinic, string computer, string user, SecureString password)
     {
+        if (!Rules.HasDomain(clinic))
+            return;
         Rules.ComputerName(computer);
         await Task.Run(() =>
         {

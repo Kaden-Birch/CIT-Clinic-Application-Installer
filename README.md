@@ -6,7 +6,7 @@ Portable Windows workstation provisioning for clinic technicians. The kit contai
 
 1. Extract **the entire** `CITDeploy-win-x64.zip` to a writable USB drive. Keep the DLLs and runtime files beside `CITDeploy.exe`.
 2. On Windows 11 Pro/Enterprise x64, launch `CITDeploy.exe` and accept elevation.
-3. In **Manage clinics**, create a clinic, enter its AD domain/optional OU and naming prefix, and optionally import its clinic-specific Syncro installer. Clinics without one can be saved and deployed; Syncro is skipped.
+3. In **Manage clinics**, create a clinic, optionally enter its AD domain, OU and naming prefix, and optionally import its clinic-specific Syncro installer. Clinics without one can be saved and deployed; Syncro is skipped.
 4. In **Software library**, import a file or a complete media folder and select its entrypoint. Configure installation mode, arguments, detection, prerequisites and optional documentation. Analyze and test packages on a controlled Windows test machine.
 5. In **Manage profiles**, select a clinic and choose its software/order. Syncro and domain settings are inherited automatically.
 6. In **Deploy**, choose the clinic/profile, review the name and optional software overrides, then start. Prerequisites are added automatically. Provide authorized domain credentials only at the domain stage. Review the final summary and choose when to reboot.
@@ -32,7 +32,7 @@ No installers are downloaded. Do not put passwords or tokens in package argument
 
 SQLite has normalized clinics, profiles, software, profile selections, dependencies, clinic KB links and versioned settings. Management saves are transactional and create a consistent SQLite backup first. Unknown schema versions are rejected. Do not run concurrent copies against one kit. Domain passwords are held in `SecureString`, passed directly to Windows APIs through a temporary unmanaged buffer, and zeroed afterward. They are never supplied in process arguments or persisted. Installer output is drained but not retained because it may disclose vendor enrollment data.
 
-Domain controller discovery runs before installation and again before asking for credentials. Windows joins the configured domain/OU and renames the account. A rename failure after a successful join is reported as a partial failure requiring reboot. Domain membership, rename and real installer behavior must be tested in your environment.
+The domain is optional. When blank, domain preflight, credential prompts, joining and renaming are skipped; the existing computer name is kept, and reboot is only offered if an installer requires it. When a domain is configured, domain controller discovery runs before installation and again before asking for credentials. Windows joins the configured domain/OU and renames the account. A rename failure after a successful join is reported as a partial failure requiring reboot. Domain membership, rename and real installer behavior must be tested in your environment.
 
 ## Build and test
 

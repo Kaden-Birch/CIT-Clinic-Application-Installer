@@ -8,6 +8,17 @@ using Xunit;
 namespace CITDeploy.Windows.Tests;
 public sealed class WindowsTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task BlankDomainSkipsNativePreflightAndJoin(string domain)
+    {
+        var service = new DomainService();
+        using var password = new System.Security.SecureString();
+        await service.Preflight(domain);
+        // An invalid new name and empty credentials must never reach validation or native APIs.
+        await service.Join(new Clinic { DomainFqdn = domain }, "invalid/name", "", password);
+    }
     [Fact]
     public void EmbeddedMsiIsValidatedWithoutExecutingWrapper()
     {

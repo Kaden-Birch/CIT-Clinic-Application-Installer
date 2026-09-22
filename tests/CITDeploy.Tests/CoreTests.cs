@@ -3,6 +3,27 @@ using Xunit;
 namespace CITDeploy.Tests;
 public sealed class CoreTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ClinicWithoutDomainCanBeSaved(string domain)
+    {
+        using var temp = new Temp();
+        using var repository = new CatalogRepository(new PortableStorage(temp.Path));
+        repository.Save(new Catalog { Clinics = [new() { Id = 1, Name = "Clinic", DomainFqdn = domain }] }, "Save without domain");
+        Assert.False(Rules.HasDomain(Assert.Single(repository.Load().Clinics)));
+    }
+    [Theory]
+    [InlineData("not-a-fqdn")]
+    [InlineData("https://clinic.test")]
+    public void ProvidedDomainMustStillBeValid(string domain)
+    {
+        Assert.Throws<InvalidOperationException>(() => Rules.Validate(new Catalog { Clinics = [new() { Id = 1, Name = "Clinic", DomainFqdn = domain }] }));
+        Assert.True(Rules.HasDomain(new()
+        {
+            DomainFqdn = "clinic.test"
+        }));
+    }
     [Fact]
     public void DependencyOrderingOverridesManualOrder()
     {
