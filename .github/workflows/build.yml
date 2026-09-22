@@ -19,7 +19,7 @@ jobs:
       - run: dotnet test tests/CITDeploy.Tests/CITDeploy.Tests.csproj -c Release --no-build --logger "trx;LogFileName=core.trx"
       - run: dotnet test tests/CITDeploy.Windows.Tests/CITDeploy.Windows.Tests.csproj -c Release --no-build --logger "trx;LogFileName=windows.trx"
         env:
-          CIT_UI_SCREENSHOT: artifacts/ui-smoke.png
+          CIT_UI_SCREENSHOT: ${{ github.workspace }}/artifacts/ui-smoke.png
       - run: dotnet publish src/CITDeploy.Windows/CITDeploy.Windows.csproj -c Release -r win-x64 --self-contained true -o artifacts/CITDeploy -p:PublishSingleFile=false
       - uses: actions/upload-artifact@v4
         with:
