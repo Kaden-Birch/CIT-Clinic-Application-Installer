@@ -450,14 +450,6 @@ public sealed class MainWindow : Window
             ValidatePackagePaths(p);
         if (!Confirm($"Deploy {plan.Count} application(s), required Syncro agent, and join {clinic.DomainFqdn} as {name}?"))
             return;
-        busy = true;
-        start.IsEnabled = false;
-        clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = false;
-        foreach (TabItem tab in tabs.Items)
-            if (tab != tabs.Items[0])
-                tab.IsEnabled = false;
-        steps.Clear();
-        summary.Text = "Checking domain connectivity…";
         var results = new Dictionary<int, StepResult>();
         var directory = Path.Combine(session.Storage.Root, "Logs", name);
         Directory.CreateDirectory(directory);
@@ -466,6 +458,14 @@ public sealed class MainWindow : Window
         var domain = new DomainService();
         var domainStep = new StepViewModel("Domain join + rename");
         bool reboot = false, joined = false;
+        busy = true;
+        start.IsEnabled = false;
+        clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = false;
+        foreach (TabItem tab in tabs.Items)
+            if (tab != tabs.Items[0])
+                tab.IsEnabled = false;
+        steps.Clear();
+        summary.Text = "Checking domain connectivity…";
         try
         {
             await domain.Preflight(clinic.DomainFqdn);
@@ -553,9 +553,23 @@ public sealed class MainWindow : Window
                 row.Detail = ex.Message;
             }
             summary.Text = "Deployment incomplete: " + ex.Message;
-            Log(summary.Text);
         }
-        finally { Log($"Final summary: {summary.Text}; domain joined={joined}; reboot required={reboot}; ended {DateTime.UtcNow:O}"); busy = false; start.IsEnabled = true; clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = true; foreach (TabItem tab in tabs.Items) tab.IsEnabled = true; }
+        finally
+        {
+            busy = false;
+            start.IsEnabled = true;
+            clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = true;
+            foreach (TabItem tab in tabs.Items)
+                tab.IsEnabled = true;
+            try
+            {
+                Log($"Final summary: {summary.Text}; domain joined={joined}; reboot required={reboot}; ended {DateTime.UtcNow:O}");
+            }
+            catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
+            {
+                summary.Text += "\nCould not persist the final log: " + logError.Message;
+            }
+        }
         if (reboot && Confirm(summary.Text + "\n\nReboot this workstation now?"))
             Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "shutdown.exe"), "/r /t 0") { UseShellExecute = false });
     }
