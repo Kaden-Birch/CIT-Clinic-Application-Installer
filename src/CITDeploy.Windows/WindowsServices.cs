@@ -39,6 +39,7 @@ public sealed class WindowsRunner(PortableStorage storage, Func<string, Task<Tim
     public async Task<ExecutionResult> Run(Package package, bool interactive, bool uninstall)
     {
         var started = DateTime.UtcNow;
+        var rebootRequired = false;
         if (!uninstall && !string.IsNullOrWhiteSpace(package.PreInstallScript))
         {
             var pre = await Launch(storage.Resolve(package.PreInstallScript), "", false, package.TimeoutSeconds);
@@ -46,6 +47,7 @@ public sealed class WindowsRunner(PortableStorage storage, Func<string, Task<Tim
                 return pre;
         }
         var result = await Raw(Command(package, interactive, uninstall), interactive, package.TimeoutSeconds);
+        rebootRequired |= result.ExitCode == 3010;
         if (!uninstall && !result.TimedOut && (package.SuccessCodes.Contains(result.ExitCode ?? -1) || result.ExitCode == 3010)
             && !string.IsNullOrWhiteSpace(package.PostInstallScript))
         {
@@ -55,7 +57,8 @@ public sealed class WindowsRunner(PortableStorage storage, Func<string, Task<Tim
         }
         return result with
         {
-            Duration = DateTime.UtcNow - started
+            Duration = DateTime.UtcNow - started,
+            RebootRequired = rebootRequired
         };
     }
     public static (string File, string Args) SplitCommand(string command)

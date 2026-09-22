@@ -59,8 +59,8 @@ public sealed class Catalog
 {
     public List<Clinic> Clinics { get; set; } = []; public List<Profile> Profiles { get; set; } = []; public List<Package> Packages { get; set; } = []; public List<SiteLink> SiteLinks { get; set; } = [];
 }
-public record ExecutionResult(int? ExitCode, bool TimedOut, TimeSpan Duration);
-public record StepResult(Package Package, StepState State, int? ExitCode, string Detail, bool Verified = false);
+public record ExecutionResult(int? ExitCode, bool TimedOut, TimeSpan Duration, bool RebootRequired = false);
+public record StepResult(Package Package, StepState State, int? ExitCode, string Detail, bool Verified = false, bool RebootRequired = false);
 public static class Rules
 {
     public static bool Available(Package p, int clinic) => p.IsActive && (p.ClinicId is null || p.ClinicId == clinic);

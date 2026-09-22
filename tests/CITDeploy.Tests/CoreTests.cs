@@ -204,6 +204,17 @@ public sealed class CoreTests
         Assert.Contains(42, loaded.Packages.Single(x => x.Id == 2).SuccessCodes);
         Assert.Equal(new[] { 1, 2 }, Rules.Plan(loaded, 1, [2]).Select(x => x.Id));
     }
+    [Fact]
+    public async Task RebootRequirementSurvivesRetryAfterFailedDetection()
+    {
+        var engine = new DeploymentEngine(new FakeRunner([3010, 0]), new FakeDetection([false, true]), new FakeTech(Decision.Retry));
+        var result = await engine.Execute(new()
+        {
+            DetectionType = DetectionType.FileExists
+        }, test: true);
+        Assert.Equal(StepState.RebootRequired, result.State);
+        Assert.True(result.RebootRequired);
+    }
     sealed class FakeRunner(IEnumerable<int> codes) : IInstallerRunner
     {
         readonly Queue<int> values = new(codes); public List<bool> Interactive = []; public Task<ExecutionResult> Run(Package p, bool interactive, bool uninstall)

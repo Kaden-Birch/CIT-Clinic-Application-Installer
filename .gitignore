@@ -8,3 +8,6 @@ Logs/
 Backups/
 Software/
 Syncro/
+
+**/TestResults/
+.CITDeploy.lock

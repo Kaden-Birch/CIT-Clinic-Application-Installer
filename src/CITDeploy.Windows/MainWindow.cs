@@ -420,6 +420,7 @@ public sealed class MainWindow : Window
                 }
             }
         }
+        catch (Exception ex) { Log("Test incomplete: " + ex.Message); throw; }
         finally { busy = false; owner.IsEnabled = true; }
     }
     void Log(string text)
@@ -493,14 +494,14 @@ public sealed class MainWindow : Window
                 results[p.Id] = result;
                 row.State = result.State;
                 row.Detail = result.Detail;
-                reboot |= result.State == StepState.RebootRequired;
+                reboot |= result.RebootRequired;
             }
             var sync = new Package { Name = "Syncro · " + clinic.Name, EntrypointRelativePath = clinic.SyncroRelativePath, SilentArguments = clinic.SyncroArguments, InstallMode = InstallMode.Automatic };
             syncRow.State = StepState.Running;
             var syncResult = await engine.Execute(sync, log: Log);
             syncRow.State = syncResult.State;
             syncRow.Detail = syncResult.Detail;
-            reboot |= syncResult.State == StepState.RebootRequired;
+            reboot |= syncResult.RebootRequired;
             if (syncResult.State == StepState.Failed)
                 throw new InvalidOperationException("Required Syncro installation failed; domain join was not attempted.");
             domainStep.State = StepState.Running;
@@ -534,7 +535,23 @@ public sealed class MainWindow : Window
             var failures = results.Values.Count(r => r.State == StepState.Failed);
             summary.Text = $"{(failures == 0 ? "Deployment completed" : "Completed with explicitly overridden failures")}. {results.Values.Count(r => r.State is StepState.Success or StepState.RebootRequired)} installed, {results.Values.Count(r => r.State == StepState.Skipped)} skipped, {failures} failed. Domain joined. Reboot required.";
         }
-        catch (Exception ex) { if (ex is DomainJoinPartialException) { reboot = true; joined = true; } foreach (var row in steps.Where(r => r.State == StepState.Running)) { row.State = StepState.Failed; row.Detail = ex.Message; } summary.Text = "Deployment incomplete: " + ex.Message; Log(summary.Text); }
+        catch (Exception ex)
+        {
+            if (ex is DeploymentAbortedException aborted)
+                reboot |= aborted.RebootRequired;
+            if (ex is DomainJoinPartialException)
+            {
+                reboot = true;
+                joined = true;
+            }
+            foreach (var row in steps.Where(r => r.State == StepState.Running))
+            {
+                row.State = StepState.Failed;
+                row.Detail = ex.Message;
+            }
+            summary.Text = "Deployment incomplete: " + ex.Message;
+            Log(summary.Text);
+        }
         finally { Log($"Final summary: {summary.Text}; domain joined={joined}; reboot required={reboot}; ended {DateTime.UtcNow:O}"); busy = false; start.IsEnabled = true; clinics.IsEnabled = profiles.IsEnabled = computer.IsEnabled = software.IsEnabled = true; foreach (TabItem tab in tabs.Items) tab.IsEnabled = true; }
         if (reboot && Confirm(summary.Text + "\n\nReboot this workstation now?"))
             Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "shutdown.exe"), "/r /t 0") { UseShellExecute = false });
