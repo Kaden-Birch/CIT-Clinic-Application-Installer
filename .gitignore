@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.vs/
+artifacts/
+*.user
+*.db
+Logs/
+Backups/
+Software/
+Syncro/
+
+**/TestResults/
+.CITDeploy.lock

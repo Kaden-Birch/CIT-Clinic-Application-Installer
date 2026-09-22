@@ -1,0 +1,37 @@
+name: Build and test portable Windows kit
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore CITDeploy.sln
+      - run: dotnet build CITDeploy.sln -c Release --no-restore
+      - run: dotnet test tests/CITDeploy.Tests/CITDeploy.Tests.csproj -c Release --no-build --logger "trx;LogFileName=core.trx"
+      - run: dotnet test tests/CITDeploy.Windows.Tests/CITDeploy.Windows.Tests.csproj -c Release --no-build --logger "trx;LogFileName=windows.trx"
+        env:
+          CIT_UI_SCREENSHOT: ${{ github.workspace }}/artifacts/ui-smoke.png
+      - run: dotnet publish src/CITDeploy.Windows/CITDeploy.Windows.csproj -c Release -r win-x64 --self-contained true -o artifacts/CITDeploy -p:PublishSingleFile=false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CITDeploy-win-x64
+          path: artifacts/CITDeploy/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: tests/**/TestResults/*.trx
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-smoke
+          path: artifacts/ui-smoke.png
