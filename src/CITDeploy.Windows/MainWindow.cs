@@ -118,10 +118,12 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(right.Children[0], Dock.Top);
         DockPanel.SetDock(summary, Dock.Bottom);
         right.Children.Add(summary);
-        var grid = new DataGrid { ItemsSource = steps, AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column, RowHeight = 50 };
+        var wrappedText = new Style(typeof(TextBlock));
+        wrappedText.Setters.Add(new Setter(TextBlock.TextWrappingProperty, TextWrapping.Wrap));
+        var grid = new DataGrid { ItemsSource = steps, AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, HeadersVisibility = DataGridHeadersVisibility.Column, MinRowHeight = 50 };
         grid.Columns.Add(new DataGridTextColumn { Header = "Step", Binding = new System.Windows.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         grid.Columns.Add(new DataGridTextColumn { Header = "Status", Binding = new System.Windows.Data.Binding("State"), Width = 120 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Result", Binding = new System.Windows.Data.Binding("Detail"), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Result", ElementStyle = wrappedText, Binding = new System.Windows.Data.Binding("Detail"), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
         right.Children.Add(grid);
         root.Children.Add(right);
         tabs.Items.Add(new TabItem { Header = "Deploy", Content = root });

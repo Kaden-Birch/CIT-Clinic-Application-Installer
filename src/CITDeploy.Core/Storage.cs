@@ -116,7 +116,7 @@ public sealed class CatalogRepository : IDisposable
     }
     public void Backup()
     {
-        using var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource=Path.Combine(storage.Root, "Backups", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff") + ".db"),Pooling=false }.ToString());
+        using var target = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(storage.Root, "Backups", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fffffff") + ".db"), Pooling = false }.ToString());
         target.Open();
         db.BackupDatabase(target);
     }

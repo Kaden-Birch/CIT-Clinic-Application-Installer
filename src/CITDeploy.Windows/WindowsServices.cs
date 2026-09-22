@@ -92,6 +92,8 @@ public sealed class WindowsRunner(PortableStorage storage, Func<string, Task<Tim
     public static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
     async Task<ExecutionResult> Raw(InstallerCommand command, bool interactive, int seconds)
     {
+        if (seconds < 1 || seconds > 86400)
+            throw new InvalidOperationException("Timeout must be between 1 and 86400 seconds.");
         var start = DateTime.UtcNow;
         using var process = new Process
         {

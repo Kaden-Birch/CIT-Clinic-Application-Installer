@@ -116,8 +116,8 @@ public static class Rules
             throw new InvalidOperationException("Profile names must be unique within a clinic.");
         foreach (var p in c.Packages)
         {
-            if (string.IsNullOrWhiteSpace(p.Name) || p.TimeoutSeconds < 1)
-                throw new InvalidOperationException("Package name and positive timeout required.");
+            if (string.IsNullOrWhiteSpace(p.Name) || p.TimeoutSeconds < 1 || p.TimeoutSeconds > 86400)
+                throw new InvalidOperationException("Package name and timeout from 1 to 86400 seconds required.");
             Url(p.GeneralKbUrl);
             if (p.IsActive)
                 Plan(c, p.ClinicId ?? -1, [p.Id]);

@@ -46,12 +46,12 @@ public sealed class DeploymentEngine(IInstallerRunner runner, IDetector detector
                 verified = hasDetection && (uninstall ? !installed : installed);
                 var processOk = !result.TimedOut && result.ExitCode.HasValue && (p.SuccessCodes.Contains(result.ExitCode.Value) || result.ExitCode == 3010);
                 var ok = processOk && (hasDetection ? verified : !test && !uninstall);
-                detail = $"Exit: {result.ExitCode?.ToString() ?? "none"}; duration: {result.Duration.TotalSeconds:F1}s; detection: {(hasDetection ? (verified ? "passed" : "failed") : "not configured (unverified)")}";
+                detail = $"Exit: {result.ExitCode?.ToString() ?? "none"}; duration: {result.Duration.TotalSeconds:F1}s; timed out: {result.TimedOut}; detection: {(hasDetection ? (verified ? "passed" : "failed") : "not configured (unverified)")}";
                 log?.Invoke($"{p.Name}: {detail}; ended {DateTime.UtcNow:O}");
                 if (ok)
                     return new(p, rebootRequired ? StepState.RebootRequired : StepState.Success, result.ExitCode, detail, verified, rebootRequired);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException) { detail = ex.Message; log?.Invoke($"{p.Name}: {detail}"); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { detail = ex.Message + (result == null ? "" : $"; exit: {result.ExitCode}"); log?.Invoke($"{p.Name}: {detail}"); }
             var choice = await technician.Failure(p, detail, mode == InstallMode.Automatic);
             log?.Invoke($"{p.Name}: technician selected {choice}");
             switch (choice)
