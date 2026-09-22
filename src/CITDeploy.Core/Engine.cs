@@ -17,6 +17,16 @@ public sealed class DeploymentAbortedException(string message, bool rebootRequir
 }
 public sealed class DeploymentEngine(IInstallerRunner runner, IDetector detector, ITechnician technician)
 {
+    public Task<StepResult> ExecuteSyncro(Clinic clinic, Action<string>? log = null)
+    {
+        var package = new Package { Name = "Syncro · " + clinic.Name, EntrypointRelativePath = clinic.SyncroRelativePath, SilentArguments = clinic.SyncroArguments, InstallMode = InstallMode.Automatic };
+        if (Rules.HasSyncro(clinic))
+            return Execute(package, log: log);
+        const string detail = "No Syncro installer configured; skipped.";
+        log?.Invoke($"{package.Name}: {detail}");
+        return Task.FromResult(new StepResult(package, StepState.Skipped, null, detail));
+    }
+
     public async Task<StepResult> Execute(Package p, bool uninstall = false, bool test = false, Action<string>? log = null)
     {
         var mode = uninstall ? p.UninstallMode : p.InstallMode;

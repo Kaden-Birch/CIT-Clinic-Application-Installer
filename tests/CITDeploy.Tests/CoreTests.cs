@@ -66,6 +66,38 @@ public sealed class CoreTests
             SyncroRelativePath = "sync.exe"
         }).Count);
     }
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UnconfiguredSyncroCanBeSavedAndSkipped(string path)
+    {
+        using var temp = new Temp();
+        var storage = new PortableStorage(temp.Path);
+        using var repository = new CatalogRepository(storage);
+        repository.Save(new Catalog { Clinics = [new() { Id = 1, Name = "Clinic", DomainFqdn = "clinic.test", SyncroRelativePath = path }] }, "Save without Syncro");
+        var clinic = Assert.Single(repository.Load().Clinics);
+        Assert.Empty(storage.Missing([], clinic));
+        var runner = new FakeRunner([]);
+        var log = new List<string>();
+        var engine = new DeploymentEngine(runner, new FakeDetection([]), new FakeTech(Decision.Abort));
+        var result = await engine.ExecuteSyncro(clinic, log.Add);
+        Assert.Equal(StepState.Skipped, result.State);
+        Assert.Empty(runner.Interactive);
+        Assert.Contains("No Syncro installer configured", Assert.Single(log));
+        Assert.Single(storage.Missing([new() { EntrypointRelativePath = "missing-app.exe" }], clinic));
+    }
+    [Fact]
+    public async Task ConfiguredSyncroStillRunsAndMissingMediaStillBlocks()
+    {
+        using var temp = new Temp();
+        var storage = new PortableStorage(temp.Path);
+        var clinic = new Clinic { Name = "Clinic", SyncroRelativePath = "Syncro/agent.exe" };
+        Assert.Equal("Syncro/agent.exe", Assert.Single(storage.Missing([], clinic)));
+        var runner = new FakeRunner([0]);
+        var result = await new DeploymentEngine(runner, new FakeDetection([]), new FakeTech(Decision.Abort)).ExecuteSyncro(clinic);
+        Assert.Equal(StepState.Success, result.State);
+        Assert.Single(runner.Interactive);
+    }
     [Fact]
     public void DatabaseRoundTripPreservesInheritanceAndBackup()
     {

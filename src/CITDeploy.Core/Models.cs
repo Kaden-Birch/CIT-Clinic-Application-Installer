@@ -63,6 +63,7 @@ public record ExecutionResult(int? ExitCode, bool TimedOut, TimeSpan Duration, b
 public record StepResult(Package Package, StepState State, int? ExitCode, string Detail, bool Verified = false, bool RebootRequired = false);
 public static class Rules
 {
+    public static bool HasSyncro(Clinic clinic) => !string.IsNullOrWhiteSpace(clinic.SyncroRelativePath);
     public static bool Available(Package p, int clinic) => p.IsActive && (p.ClinicId is null || p.ClinicId == clinic);
     public static bool HasLink(string? url) => !string.IsNullOrWhiteSpace(url);
     public static void Url(string url)

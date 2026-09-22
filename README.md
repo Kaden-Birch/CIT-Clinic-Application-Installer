@@ -6,7 +6,7 @@ Portable Windows workstation provisioning for clinic technicians. The kit contai
 
 1. Extract **the entire** `CITDeploy-win-x64.zip` to a writable USB drive. Keep the DLLs and runtime files beside `CITDeploy.exe`.
 2. On Windows 11 Pro/Enterprise x64, launch `CITDeploy.exe` and accept elevation.
-3. In **Manage clinics**, create a clinic, enter its AD domain/optional OU and naming prefix, and import its clinic-specific Syncro installer.
+3. In **Manage clinics**, create a clinic, enter its AD domain/optional OU and naming prefix, and optionally import its clinic-specific Syncro installer. Clinics without one can be saved and deployed; Syncro is skipped.
 4. In **Software library**, import a file or a complete media folder and select its entrypoint. Configure installation mode, arguments, detection, prerequisites and optional documentation. Analyze and test packages on a controlled Windows test machine.
 5. In **Manage profiles**, select a clinic and choose its software/order. Syncro and domain settings are inherited automatically.
 6. In **Deploy**, choose the clinic/profile, review the name and optional software overrides, then start. Prerequisites are added automatically. Provide authorized domain credentials only at the domain stage. Review the final summary and choose when to reboot.
@@ -23,7 +23,7 @@ No installers are downloaded. Do not put passwords or tokens in package argument
 - Analyze Installer reads local signatures for MSI, Inno Setup, NSIS, InstallShield and WiX/Burn. Suggestions require testing. Existing MSI files in imported media can be explicitly chosen as alternative entrypoints. Uncompressed embedded MSI candidates are copied locally only when their MSI ProductCode can be read. No wrapper is executed merely to analyze it and no vendor-specific extraction is assumed.
 - MSI ProductCodes can be read directly. Registry uninstall discovery offers registered normal/quiet commands for review; commands with spaces in the executable path must quote that path. MSI ProductCode takes precedence when uninstalling.
 - An installer timeout offers continued waiting or explicitly confirmed process-tree termination. Termination can damage an installation; the app does not silently terminate installers.
-- Failed/overridden prerequisites block dependent packages. Failures remain visible in the final result. The Syncro step is required and a failed Syncro prevents domain join.
+- Failed/overridden prerequisites block dependent packages. Failures remain visible in the final result. Syncro is optional: an unconfigured installer is shown and logged as skipped. A configured installer must still exist and install successfully before domain join. Use Remove Syncro mapping in Manage clinics to stop deploying an existing mapping.
 - General and per-clinic HTTPS documentation links are independent and hidden when absent. Site links are edited in Manage clinics.
 
 ## Storage and safety

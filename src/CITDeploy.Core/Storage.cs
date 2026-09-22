@@ -76,8 +76,10 @@ public sealed class PortableStorage
     }
     public List<string> Missing(IEnumerable<Package> packages, Clinic clinic)
     {
-        var paths = packages.SelectMany(p => new[] { p.EntrypointRelativePath, p.PreInstallScript, p.PostInstallScript, p.DetectionScriptPath }.Where(x => !string.IsNullOrEmpty(x))).Append(clinic.SyncroRelativePath);
-        return paths.Where(p => string.IsNullOrWhiteSpace(p) || !File.Exists(Resolve(p))).Select(p => string.IsNullOrEmpty(p) ? "Clinic Syncro installer is not configured" : p).ToList();
+        var paths = packages.SelectMany(p => new[] { p.EntrypointRelativePath, p.PreInstallScript, p.PostInstallScript, p.DetectionScriptPath }.Where(x => !string.IsNullOrEmpty(x)));
+        if (Rules.HasSyncro(clinic))
+            paths = paths.Append(clinic.SyncroRelativePath);
+        return paths.Where(p => string.IsNullOrWhiteSpace(p) || !File.Exists(Resolve(p))).ToList();
     }
 }
 /// <summary>Normalized relationships and typed scalar columns; one transaction per management edit.</summary>

@@ -151,7 +151,7 @@ public sealed class MainWindow : Window
                 AddLinks(row, p, clinic.Id);
                 software.Children.Add(row);
             }
-        inherited.Children.Add(new TextBlock { Text = $"Syncro: {(string.IsNullOrEmpty(clinic.SyncroRelativePath) ? "Missing — import in Manage clinics" : Path.GetFileName(clinic.SyncroRelativePath))}\nDomain: {clinic.DomainFqdn}\nOU: {(string.IsNullOrEmpty(clinic.OuPath) ? "Default computer container" : clinic.OuPath)}", TextWrapping = TextWrapping.Wrap });
+        inherited.Children.Add(new TextBlock { Text = $"Syncro: {(!Rules.HasSyncro(clinic) ? "Not configured — will be skipped" : Path.GetFileName(clinic.SyncroRelativePath))}\nDomain: {clinic.DomainFqdn}\nOU: {(string.IsNullOrEmpty(clinic.OuPath) ? "Default computer container" : clinic.OuPath)}", TextWrapping = TextWrapping.Wrap });
     }
     string Site(Package p, int clinic) => Data.SiteLinks.FirstOrDefault(l => l.ClinicId == clinic && l.SoftwareId == p.Id)?.Url ?? "";
     void AddLinks(Panel panel, Package p, int clinic)
@@ -190,11 +190,12 @@ public sealed class MainWindow : Window
         e.Field("Target OU distinguished name (optional)", nameof(c.OuPath));
         e.Field("Computer naming prefix", nameof(c.ComputerPrefix));
         e.Field("Active", nameof(c.IsActive));
-        var media = e.Text("Inherited Syncro installer (USB-relative)", c.SyncroRelativePath);
+        var media = e.Text("Optional Syncro installer (USB-relative)", c.SyncroRelativePath);
         media.IsReadOnly = true;
         e.Action("Import / replace Syncro installer", () => { var pick = PickFile(); if (pick != null) media.Text = session.Storage.Import(pick, "Syncro", pick); });
+        e.Action("Remove Syncro mapping", () => { media.Clear(); c.SyncroArguments = ""; e.RefreshFields(); });
         e.Field("Syncro silent arguments", nameof(c.SyncroArguments));
-        e.Note("Every profile inherits this clinic’s Syncro installer, domain and naming prefix.");
+        e.Note("Every profile inherits this clinic’s domain and naming prefix. Syncro is installed only when an installer is configured.");
         var links = new Dictionary<int, TextBox>();
         foreach (var p in Data.Packages.Where(p => Rules.Available(p, c.Id)))
         {
@@ -202,7 +203,7 @@ public sealed class MainWindow : Window
             links[p.Id] = url;
             e.Action("Test " + p.Name + " site link", () => TechnicianDialogs.Open(url.Text));
         }
-        e.Save(() => { c.SyncroRelativePath = media.Text; if (string.IsNullOrEmpty(c.SyncroRelativePath)) throw new InvalidOperationException("Import the clinic Syncro installer before saving."); if (source != null) Data.Clinics.RemoveAll(x => x.Id == source.Id); Data.Clinics.Add(c); Data.SiteLinks.RemoveAll(l => l.ClinicId == c.Id); foreach (var pair in links.Where(x => Rules.HasLink(x.Value.Text))) Data.SiteLinks.Add(new(c.Id, pair.Key, pair.Value.Text)); c.UpdatedUtc = DateTime.UtcNow; session.Save("Saved clinic " + c.Name); });
+        e.Save(() => { c.SyncroRelativePath = media.Text.Trim(); if (source != null) Data.Clinics.RemoveAll(x => x.Id == source.Id); Data.Clinics.Add(c); Data.SiteLinks.RemoveAll(l => l.ClinicId == c.Id); foreach (var pair in links.Where(x => Rules.HasLink(x.Value.Text))) Data.SiteLinks.Add(new(c.Id, pair.Key, pair.Value.Text)); c.UpdatedUtc = DateTime.UtcNow; session.Save("Saved clinic " + c.Name); });
         e.ShowDialog();
         Refresh();
     }
@@ -227,7 +228,7 @@ public sealed class MainWindow : Window
             options.Clear();
             var c = (Clinic)clinic.SelectedItem;
             p.ClinicId = c.Id;
-            rows.Children.Add(new TextBlock { Text = $"Inherited Syncro: {c.SyncroRelativePath}\nDomain: {c.DomainFqdn}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) });
+            rows.Children.Add(new TextBlock { Text = $"Inherited Syncro: {(Rules.HasSyncro(c) ? c.SyncroRelativePath : "Not configured — will be skipped")}\nDomain: {c.DomainFqdn}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) });
             foreach (var package in Data.Packages.Where(x => Rules.Available(x, c.Id)))
             {
                 var cb = new CheckBox { Content = package.Name, IsChecked = p.Software.ContainsKey(package.Id) };
@@ -448,7 +449,7 @@ public sealed class MainWindow : Window
             throw new InvalidOperationException("Missing required media:\n" + string.Join("\n", missing));
         foreach (var p in plan)
             ValidatePackagePaths(p);
-        if (!Confirm($"Deploy {plan.Count} application(s), required Syncro agent, and join {clinic.DomainFqdn} as {name}?"))
+        if (!Confirm($"Deploy {plan.Count} application(s), {(Rules.HasSyncro(clinic) ? "install the configured Syncro agent" : "skip Syncro (not configured)")}, and join {clinic.DomainFqdn} as {name}?"))
             return;
         var results = new Dictionary<int, StepResult>();
         var directory = Path.Combine(session.Storage.Root, "Logs", name);
@@ -499,14 +500,13 @@ public sealed class MainWindow : Window
                 row.Detail = result.Detail;
                 reboot |= result.RebootRequired;
             }
-            var sync = new Package { Name = "Syncro · " + clinic.Name, EntrypointRelativePath = clinic.SyncroRelativePath, SilentArguments = clinic.SyncroArguments, InstallMode = InstallMode.Automatic };
             syncRow.State = StepState.Running;
-            var syncResult = await engine.Execute(sync, log: Log);
+            var syncResult = await engine.ExecuteSyncro(clinic, log: Log);
             syncRow.State = syncResult.State;
             syncRow.Detail = syncResult.Detail;
             reboot |= syncResult.RebootRequired;
             if (syncResult.State == StepState.Failed)
-                throw new InvalidOperationException("Required Syncro installation failed; domain join was not attempted.");
+                throw new InvalidOperationException("Configured Syncro installation failed; domain join was not attempted.");
             domainStep.State = StepState.Running;
             summary.Text = "Preparing domain join…";
             await domain.Preflight(clinic.DomainFqdn);
