@@ -10,6 +10,7 @@ public sealed class Editor : Window
     readonly object model;
     public Editor(string title, object model)
     {
+        SetResourceReference(StyleProperty, typeof(Window));
         this.model = model;
         Title = title;
         Width = 680;

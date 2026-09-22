@@ -9,6 +9,49 @@ namespace CITDeploy.Windows.Tests;
 public sealed class WindowsTests
 {
     [Fact]
+    public void EmbeddedMsiIsValidatedWithoutExecutingWrapper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cit-msi-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var msi = Path.Combine(root, "fixture.msi");
+            Assert.Equal(0u, MsiOpenDatabase(msi, new IntPtr(3), out var database));
+            try
+            {
+                foreach (var sql in new[] { "CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` CHAR(0) LOCALIZABLE PRIMARY KEY `Property`)", "INSERT INTO `Property` (`Property`,`Value`) VALUES ('ProductCode','{11111111-1111-1111-1111-111111111111}')" })
+                {
+                    Assert.Equal(0u, MsiDatabaseOpenView(database, sql, out var view));
+                    try
+                    {
+                        Assert.Equal(0u, MsiViewExecute(view, 0));
+                    }
+                    finally { MsiCloseHandle(view); }
+                }
+                Assert.Equal(0u, MsiDatabaseCommit(database));
+            }
+            finally { MsiCloseHandle(database); }
+            Assert.Equal("{11111111-1111-1111-1111-111111111111}", MsiMetadata.ProductCode(msi));
+            var wrapper = Path.Combine(root, "wrapper.exe");
+            using (var output = File.Create(wrapper))
+            {
+                output.Write(new byte[1024]);
+                output.Write(File.ReadAllBytes(msi));
+            }
+            var candidate = InstallerAnalyzer.TryExtractEmbeddedMsi(wrapper, root);
+            Assert.NotNull(candidate);
+            Assert.Equal(MsiMetadata.ProductCode(msi), MsiMetadata.ProductCode(candidate));
+            File.WriteAllBytes(wrapper, [0, 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0]);
+            Assert.Null(InstallerAnalyzer.TryExtractEmbeddedMsi(wrapper, root));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+    [System.Runtime.InteropServices.DllImport("msi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern uint MsiOpenDatabase(string path, IntPtr persist, out uint database);
+    [System.Runtime.InteropServices.DllImport("msi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern uint MsiDatabaseOpenView(uint database, string query, out uint view);
+    [System.Runtime.InteropServices.DllImport("msi.dll")] static extern uint MsiViewExecute(uint view, uint record);
+    [System.Runtime.InteropServices.DllImport("msi.dll")] static extern uint MsiDatabaseCommit(uint database);
+    [System.Runtime.InteropServices.DllImport("msi.dll")] static extern uint MsiCloseHandle(uint handle);
+    [Fact]
     public async Task CommandAndLocalDetection()
     {
         var root = Path.Combine(Path.GetTempPath(), "cit-windows-" + Guid.NewGuid());
@@ -81,6 +124,7 @@ public sealed class WindowsTests
                 session.Save("UI smoke fixture");
                 var window = new MainWindow(session);
                 window.Show();
+                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert.True(window.ActualWidth >= 900);
                 Assert.True(window.IsVisible);

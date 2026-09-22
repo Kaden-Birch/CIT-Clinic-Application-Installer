@@ -255,6 +255,42 @@ public sealed class DomainService
 }
 public static class InstallerAnalyzer
 {
+    // Only carve an uncompressed compound-file candidate. Never launch a wrapper or assume vendor switches.
+    public static string? TryExtractEmbeddedMsi(string executable, string packageFolder)
+    {
+        if (!Path.GetExtension(executable).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+            return null;
+        using var input = File.OpenRead(executable);
+        if (input.Length > 512L * 1024 * 1024)
+            return null;
+        var prefix = new byte[Math.Min(input.Length, 16 * 1024 * 1024)];
+        input.ReadExactly(prefix);
+        byte[] signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        int offset = 1;
+        for (var attempt = 0; attempt < 4 && offset < prefix.Length; attempt++)
+        {
+            var index = prefix.AsSpan(offset).IndexOf(signature);
+            if (index < 0)
+                return null;
+            offset += index;
+            var candidate = Path.Combine(packageFolder, "analyzed-" + Guid.NewGuid().ToString("N") + ".msi");
+            var keep = false;
+            try
+            {
+                input.Position = offset;
+                using (var output = File.Create(candidate))
+                    input.CopyTo(output);
+                // A CFB signature alone could be another document type. Require a readable MSI ProductCode.
+                keep = Guid.TryParse(MsiMetadata.ProductCode(candidate), out _);
+                if (keep)
+                    return candidate;
+            }
+            finally { if (!keep && File.Exists(candidate)) File.Delete(candidate); }
+            offset++;
+        }
+        return null;
+    }
+
     public static (string Framework, string Arguments) Analyze(string file)
     {
         if (Path.GetExtension(file).Equals(".msi", StringComparison.OrdinalIgnoreCase))
