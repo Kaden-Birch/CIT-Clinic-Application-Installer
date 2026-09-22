@@ -20,6 +20,23 @@ public sealed class WindowsTests
         await service.Join(new Clinic { DomainFqdn = domain }, "invalid/name", "", password);
     }
     [Fact]
+    public void UnreadableMsiClearsStaleCodeAndOtherMediaKeepsManualCode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cit-metadata-" + Guid.NewGuid());
+        Directory.CreateDirectory(root);
+        try
+        {
+            var package = new Package { ProductCode = "existing manual code" };
+            Assert.False(MsiMetadata.PopulateProductCode(package, Path.Combine(root, "setup.exe")));
+            Assert.Equal("existing manual code", package.ProductCode);
+            var invalidMsi = Path.Combine(root, "invalid.msi");
+            File.WriteAllText(invalidMsi, "not an MSI database");
+            Assert.False(MsiMetadata.PopulateProductCode(package, invalidMsi));
+            Assert.Empty(package.ProductCode);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+    [Fact]
     public void EmbeddedMsiIsValidatedWithoutExecutingWrapper()
     {
         var root = Path.Combine(Path.GetTempPath(), "cit-msi-" + Guid.NewGuid());
@@ -43,6 +60,19 @@ public sealed class WindowsTests
             }
             finally { MsiCloseHandle(database); }
             Assert.Equal("{11111111-1111-1111-1111-111111111111}", MsiMetadata.ProductCode(msi));
+            var storage = new PortableStorage(Path.Combine(root, "kit"));
+            var package = new Package { ProductCode = "{22222222-2222-2222-2222-222222222222}" };
+            var imported = storage.Import(msi, "Software/Universal", msi);
+            Assert.True(MsiMetadata.PopulateProductCode(package, storage.Resolve(imported)));
+            Assert.Equal(MsiMetadata.ProductCode(msi), package.ProductCode);
+            var folder = Path.Combine(root, "media");
+            Directory.CreateDirectory(folder);
+            var folderMsi = Path.Combine(folder, "SETUP.MSI");
+            File.Copy(msi, folderMsi);
+            package.ProductCode = "old code";
+            imported = storage.Import(folder, "Software/Universal", folderMsi);
+            Assert.True(MsiMetadata.PopulateProductCode(package, storage.Resolve(imported)));
+            Assert.Equal(MsiMetadata.ProductCode(msi), package.ProductCode);
             var wrapper = Path.Combine(root, "wrapper.exe");
             using (var output = File.Create(wrapper))
             {

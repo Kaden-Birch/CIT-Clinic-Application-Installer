@@ -317,6 +317,16 @@ public sealed class MainWindow : Window
         scope.IsEnabled = source == null;
         var media = e.Text("Registered entrypoint (USB-relative)", p.EntrypointRelativePath);
         media.IsReadOnly = true;
+        void PopulateMsiProductCode()
+        {
+            var path = session.Storage.Resolve(media.Text);
+            if (!Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase))
+                return;
+            var populated = MsiMetadata.PopulateProductCode(p, path);
+            e.RefreshFields();
+            if (!populated)
+                MessageBox.Show(e, "The MSI ProductCode could not be read. The field has been cleared; you can enter it manually.", "MSI metadata", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
         void Import(bool folder)
         {
             string? sourcePath, entry;
@@ -345,6 +355,7 @@ public sealed class MainWindow : Window
             var remainder = Path.GetRelativePath(category, media.Text);
             p.RelativeFolder = Path.Combine(category, remainder.Split(Path.DirectorySeparatorChar)[0]);
             scope.IsEnabled = false;
+            PopulateMsiProductCode();
         }
         e.Action("Import installer file", () => Import(false));
         e.Action("Import complete folder + select entrypoint", () => Import(true));
@@ -353,7 +364,7 @@ public sealed class MainWindow : Window
         var successCodes = e.Text("Success exit codes (comma-separated; 3010 always requires reboot)", string.Join(",", p.SuccessCodes));
         e.Note("Detection: MSI ProductCode, uninstall display-name substring, file/folder absolute target path, HKLM\\key|valueName|expectedValue, or a bundled PowerShell script (exit 0 present / 1 absent). Script paths must be inside this package’s imported folder. No detection means production installs run each time; tests cannot pass without verification.");
         e.Action("Test Installation Guide link", () => TechnicianDialogs.Open(p.GeneralKbUrl));
-        e.Action("Analyze installer", () => { p.EntrypointRelativePath = media.Text; var (framework, args) = InstallerAnalyzer.Analyze(session.Storage.Resolve(media.Text)); p.InstallerFramework = framework; p.SuggestedSilentArgs = args; e.RefreshFields(); Info($"Framework: {framework}\nSuggested arguments: {args}\nSuggestions are unverified. Enter or adjust arguments before testing."); var embedded = InstallerAnalyzer.TryExtractEmbeddedMsi(session.Storage.Resolve(media.Text), session.Storage.Resolve(p.RelativeFolder)); if (embedded != null) Info("A locally embedded MSI was found and validated as an MSI database. You may choose it in the next dialog after reviewing wrapper prerequisites."); var msi = Directory.GetFiles(session.Storage.Resolve(p.RelativeFolder), "*.msi", SearchOption.AllDirectories); if (msi.Length > 0) { var candidates = new Editor("Optional MSI entrypoint", new object()) { Owner = e, Height = 450 }; candidates.Note("These MSI files are already inside the imported media. Selecting one registers it as the entrypoint; it may bypass wrapper prerequisites, so test it before deployment."); foreach (var candidate in msi) candidates.Action(Path.GetRelativePath(session.Storage.Root, candidate), () => { media.Text = Path.GetRelativePath(session.Storage.Root, candidate); p.EntrypointRelativePath = media.Text; p.ProductCode = MsiMetadata.ProductCode(candidate); e.RefreshFields(); candidates.Close(); }); candidates.ShowDialog(); } if (Path.GetExtension(media.Text).Equals(".msi", StringComparison.OrdinalIgnoreCase)) { p.ProductCode = MsiMetadata.ProductCode(session.Storage.Resolve(media.Text)); e.RefreshFields(); } });
+        e.Action("Analyze installer", () => { p.EntrypointRelativePath = media.Text; var (framework, args) = InstallerAnalyzer.Analyze(session.Storage.Resolve(media.Text)); p.InstallerFramework = framework; p.SuggestedSilentArgs = args; e.RefreshFields(); Info($"Framework: {framework}\nSuggested arguments: {args}\nSuggestions are unverified. Enter or adjust arguments before testing."); var embedded = InstallerAnalyzer.TryExtractEmbeddedMsi(session.Storage.Resolve(media.Text), session.Storage.Resolve(p.RelativeFolder)); if (embedded != null) Info("A locally embedded MSI was found and validated as an MSI database. You may choose it in the next dialog after reviewing wrapper prerequisites."); var msi = Directory.GetFiles(session.Storage.Resolve(p.RelativeFolder), "*.msi", SearchOption.AllDirectories); if (msi.Length > 0) { var candidates = new Editor("Optional MSI entrypoint", new object()) { Owner = e, Height = 450 }; candidates.Note("These MSI files are already inside the imported media. Selecting one registers it as the entrypoint; it may bypass wrapper prerequisites, so test it before deployment."); foreach (var candidate in msi) candidates.Action(Path.GetRelativePath(session.Storage.Root, candidate), () => { media.Text = Path.GetRelativePath(session.Storage.Root, candidate); p.EntrypointRelativePath = media.Text; PopulateMsiProductCode(); candidates.Close(); }); candidates.ShowDialog(); } if (Path.GetExtension(media.Text).Equals(".msi", StringComparison.OrdinalIgnoreCase)) { PopulateMsiProductCode(); } });
         foreach (var (label, property) in new[] { ("Framework (informational)", nameof(p.InstallerFramework)), ("Suggested silent arguments (unverified)", nameof(p.SuggestedSilentArgs)), ("Uninstall mode", nameof(p.UninstallMode)), ("Uninstall executable/registered command", nameof(p.UninstallCommand)), ("Silent uninstall arguments", nameof(p.UninstallArguments)), ("Discovered quiet uninstall command", nameof(p.QuietUninstallCommand)) })
             e.Field(label, property);
         e.Note("Do not enter credentials, tokens or other secrets in installer arguments. Use vendor-provided local enrollment media.\nAn uninstall command with spaces in its executable path must quote that path. MSI ProductCode takes priority over executable commands. Uninstall uses the package timeout.");

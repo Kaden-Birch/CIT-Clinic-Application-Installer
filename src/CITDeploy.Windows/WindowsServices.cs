@@ -310,6 +310,16 @@ public static class InstallerAnalyzer
 }
 public static class MsiMetadata
 {
+    public static bool PopulateProductCode(Package package, string path)
+    {
+        if (!Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var code = ProductCode(path);
+        // Replaced media must never retain an unrelated ProductCode if the new MSI cannot be read.
+        package.ProductCode = Guid.TryParse(code, out _) ? code : "";
+        return package.ProductCode.Length > 0;
+    }
+
     public static string ProductCode(string path)
     {
         uint database = 0, view = 0, record = 0;
